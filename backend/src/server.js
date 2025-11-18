@@ -27,5 +27,10 @@ if (process.env.NODE_ENV === "production") {
   });
 }
 
-app.listen(PORT, () => console.log("Server is running on port: " + PORT));
+// Start server locally (Vercel will use api/index.js)
+if (!process.env.VERCEL) {
+  app.listen(PORT, () => console.log("Server is running on port: " + PORT));
+}
+
+export default app;
 
