@@ -3,6 +3,11 @@ import { isSpoofedBot } from "@arcjet/inspect";
 
 export const arcjetProtection = async (req, res, next) => {
   try {
+    // Skip arcjet if not initialized
+    if (!aj) {
+      return next();
+    }
+    
     const decision = await aj.protect(req);
 
     if (decision.isDenied()) {
