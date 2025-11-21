@@ -1,5 +1,6 @@
 {
   "buildCommand": "npm run build",
+  "installCommand": "npm install --prefix backend && cd frontend && npm install",
   "outputDirectory": "frontend/dist",
   "rewrites": [
     {
