@@ -2,7 +2,7 @@ import express from "express";
 import dotenv from "dotenv";
 import path from "path";
 import cookieParser from "cookie-parser";
-
+import cors from "cors";
 
 import authRoutes from "./routes/auth.route..js";
 import messageRoutes from "./routes/message.route.js";
@@ -19,6 +19,7 @@ const PORT = ENV.PORT || 3000;
 
 // Middleware
 app.use(express.json());
+app.use(cors({origin:ENV.CLIENT_URL, credentials: true}));
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
