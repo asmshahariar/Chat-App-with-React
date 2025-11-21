@@ -3,9 +3,7 @@ import { generateToken } from "../lib/utils.js";
 import bcrypt from "bcryptjs";
 import { sendWelcomeEmail } from "../email/emailHandlers.js";
 import cloudinary from "../lib/cloudinary.js";
-
-
-
+import mongoose from "mongoose";
 
 import "dotenv/config";
 
@@ -64,16 +62,29 @@ export const signup = async (req, res) => {
 
 
 export const login = async (req, res) => {
-
-  const { email, password } = req.body
+  const { email, password } = req.body;
 
   try {
+    // Validate input
+    if (!email || !password) {
+      return res.status(400).json({ message: "Email and password are required" });
+    }
+
+    // Check database connection
+    if (mongoose.connection.readyState !== 1) {
+      console.error("Database not connected. State:", mongoose.connection.readyState);
+      return res.status(500).json({ message: "Database connection error. Please try again." });
+    }
 
     const user = await User.findOne({ email });
-    if (!user) return res.status(400).json({ message: "Invalid email or password" });
+    if (!user) {
+      return res.status(400).json({ message: "Invalid email or password" });
+    }
 
-    const isPasswordCorrect = await bcrypt.compare(password, user.password)
-    if (!isPasswordCorrect) return res.status(400).json({ message: "Invalid email or password" });
+    const isPasswordCorrect = await bcrypt.compare(password, user.password);
+    if (!isPasswordCorrect) {
+      return res.status(400).json({ message: "Invalid email or password" });
+    }
 
     generateToken(res, user._id);
 
@@ -81,15 +92,17 @@ export const login = async (req, res) => {
       _id: user._id,
       fullName: user.fullName,
       email: user.email,
-      profilePic: user.profilePic,
+      profilePic: user.profilePic || "",
     });
-
 
   } catch (error) {
     console.error("Login error:", error);
-    res.status(500).json({ message: "Internal server error", error: error.message });
+    console.error("Error stack:", error.stack);
+    res.status(500).json({ 
+      message: "Internal server error", 
+      error: process.env.NODE_ENV === "development" ? error.message : "An error occurred during login" 
+    });
   }
-
 };
 
 
@@ -105,18 +118,54 @@ export const updateProfile = async (req, res) => {
 
     const userId = req.user._id;
 
-    const uploadResponse = await cloudinary.uploader.upload(profilePic);
+    // Upload base64 image to Cloudinary
+    let imageUrl = profilePic;
+    
+    // If it's a base64 string, upload to Cloudinary
+    if (profilePic.startsWith('data:image')) {
+      // Check if Cloudinary is configured
+      if (!process.env.CLOUDINARY_CLOUD_NAME || !process.env.CLOUDINARY_API_KEY || !process.env.CLOUDINARY_API_SECRET) {
+        console.warn("Cloudinary not configured, storing base64 directly (not recommended for production)");
+        // Store base64 directly as fallback (not ideal but works)
+        imageUrl = profilePic;
+      } else {
+        try {
+          const uploadResponse = await cloudinary.uploader.upload(profilePic, {
+            folder: "chat-app/profile-pics",
+            resource_type: "image",
+          });
+          imageUrl = uploadResponse.secure_url;
+          console.log("Image uploaded to Cloudinary:", imageUrl);
+        } catch (cloudinaryError) {
+          console.error("Cloudinary upload error:", cloudinaryError);
+          // Fallback: store base64 directly if Cloudinary fails
+          console.warn("Falling back to base64 storage");
+          imageUrl = profilePic;
+        }
+      }
+    }
 
     const updatedUser = await User.findByIdAndUpdate(
       userId,
-      { profilePic: uploadResponse.secure_url },
+      { profilePic: imageUrl },
       { new: true }
-    );
+    ).select("-password"); // Exclude password from response
 
-    res.status(200).json(updatedUser);
+    if (!updatedUser) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    console.log("Profile updated, profilePic:", updatedUser.profilePic);
+
+    res.status(200).json({
+      _id: updatedUser._id,
+      fullName: updatedUser.fullName,
+      email: updatedUser.email,
+      profilePic: updatedUser.profilePic,
+    });
   } catch (error) {
-    console.log("Error in update profile:", error);
-    res.status(500).json({ message: "Internal server error" });
+    console.error("Error in update profile:", error);
+    res.status(500).json({ message: "Internal server error", error: error.message });
   }
 };
 
