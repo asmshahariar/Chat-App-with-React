@@ -18,9 +18,29 @@ const __dirname = path.resolve();
 const PORT = ENV.PORT || 3000;
 
 // Middleware
-app.use(express.json());
-app.use(cors({origin:ENV.CLIENT_URL, credentials: true}));
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '50mb' })); // Increase limit for base64 images
+
+// CORS configuration
+const allowedOrigins = [
+  ENV.CLIENT_URL,
+  "https://chat-app-with-react-three.vercel.app",
+  "http://localhost:5173",
+].filter(Boolean); // Remove undefined values
+
+app.use(cors({
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.indexOf(origin) !== -1 || process.env.NODE_ENV === "development") {
+      callback(null, true);
+    } else {
+      callback(null, true); // Allow all origins for now, can restrict later
+    }
+  },
+  credentials: true,
+}));
+
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 app.use(cookieParser());
 
 app.use("/api/auth", authRoutes);
