@@ -19,8 +19,6 @@ function ChatContainer() {
   const messageEndRef = useRef(null);
 
   useEffect(() => {
-    if (!selectedUser || !selectedUser._id) return;
-    
     getMessagesByUserId(selectedUser._id);
     subscribeToMessages();
 
@@ -34,26 +32,20 @@ function ChatContainer() {
     }
   }, [messages]);
 
-  if (!selectedUser) {
-    return null;
-  }
-
   return (
     <>
       <ChatHeader />
       <div className="flex-1 px-6 overflow-y-auto py-8">
         {messages.length > 0 && !isMessagesLoading ? (
           <div className="max-w-3xl mx-auto space-y-6">
-            {messages.map((msg) => {
-              const isOwnMessage = msg.senderId?.toString() === authUser?._id?.toString();
-              return (
+            {messages.map((msg) => (
               <div
                 key={msg._id}
-                className={`chat ${isOwnMessage ? "chat-end" : "chat-start"}`}
+                className={`chat ${msg.senderId === authUser._id ? "chat-end" : "chat-start"}`}
               >
                 <div
                   className={`chat-bubble relative ${
-                    isOwnMessage
+                    msg.senderId === authUser._id
                       ? "bg-cyan-600 text-white"
                       : "bg-slate-800 text-slate-200"
                   }`}
@@ -70,15 +62,14 @@ function ChatContainer() {
                   </p>
                 </div>
               </div>
-              );
-            })}
+            ))}
             {/* 👇 scroll target */}
             <div ref={messageEndRef} />
           </div>
         ) : isMessagesLoading ? (
           <MessagesLoadingSkeleton />
         ) : (
-          <NoChatHistoryPlaceholder name={selectedUser?.fullName || "User"} />
+          <NoChatHistoryPlaceholder name={selectedUser.fullName} />
         )}
       </div>
 
