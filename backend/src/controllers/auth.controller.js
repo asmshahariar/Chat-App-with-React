@@ -70,10 +70,29 @@ export const login = async (req, res) => {
       return res.status(400).json({ message: "Email and password are required" });
     }
 
-    // Check database connection
+    // Ensure database connection
     if (mongoose.connection.readyState !== 1) {
-      console.error("Database not connected. State:", mongoose.connection.readyState);
-      return res.status(500).json({ message: "Database connection error. Please try again." });
+      console.log("Database not connected. Attempting to connect... State:", mongoose.connection.readyState);
+      try {
+        // Try to connect if not connected
+        if (mongoose.connection.readyState === 0 || mongoose.connection.readyState === 3) {
+          const mongoUri = process.env.MONGO_URI;
+          if (!mongoUri) {
+            console.error("MONGO_URI is not set");
+            return res.status(500).json({ message: "Server configuration error. Please contact support." });
+          }
+          await mongoose.connect(mongoUri, {
+            dbName: 'chat_db'
+          });
+          console.log("Database connected successfully");
+        }
+      } catch (dbError) {
+        console.error("Database connection error:", dbError);
+        return res.status(500).json({ 
+          message: "Database connection error. Please try again.",
+          error: process.env.NODE_ENV === "development" ? dbError.message : undefined
+        });
+      }
     }
 
     const user = await User.findOne({ email });

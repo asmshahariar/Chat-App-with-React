@@ -3,18 +3,16 @@ import dotenv from "dotenv";
 import path from "path";
 import cookieParser from "cookie-parser";
 import cors from "cors";
-import { createServer } from "http";
+import mongoose from "mongoose";
 
 import authRoutes from "./routes/auth.route..js";
 import messageRoutes from "./routes/message.route.js";
 import { connectDB } from "./lib/db.js";
 import { ENV } from "./lib/env.js";
-import { initializeSocket } from "./lib/socket.js";
 
 dotenv.config();
 
 const app = express();
-const server = createServer(app);
 
 const __dirname = path.resolve();
 
@@ -54,6 +52,25 @@ app.get("/", (req, res) => {
   res.json({ message: "Chat App API Server", status: "running" });
 });
 
+// Health check endpoint
+app.get("/api/health", (req, res) => {
+  try {
+    const dbStatus = mongoose.connection.readyState === 1 ? "connected" : "disconnected";
+    res.json({ 
+      status: "ok", 
+      database: dbStatus,
+      mongoUri: process.env.MONGO_URI ? "set" : "not set",
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    res.status(500).json({ 
+      status: "error", 
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
 // make ready for deployment
 if (ENV.NODE_ENV === "production") {
   app.use(express.static(path.join(__dirname, "../frontend/dist")));
@@ -63,19 +80,29 @@ if (ENV.NODE_ENV === "production") {
   });
 }
 
-// Initialize Socket.IO (only for local development, not for Vercel serverless)
-if (!process.env.VERCEL) {
-  initializeSocket(server);
-}
-
 // Start server locally (Vercel will use api/index.js)
 if (!process.env.VERCEL) {
-  server.listen(PORT, () => {
-    console.log("Server is running on port: " + PORT);
-    connectDB();
-  });
+  // Only import and initialize socket.io for local development
+  try {
+    const { createServer } = await import("http");
+    const { initializeSocket } = await import("./lib/socket.js");
+    const server = createServer(app);
+    initializeSocket(server);
+    server.listen(PORT, () => {
+      console.log("Server is running on port: " + PORT);
+      connectDB();
+    });
+  } catch (error) {
+    console.error("Error setting up server:", error);
+    // If socket.io fails, still try to start basic server
+    const { createServer } = await import("http");
+    const server = createServer(app);
+    server.listen(PORT, () => {
+      console.log("Server is running on port: " + PORT + " (without socket.io)");
+      connectDB();
+    });
+  }
 }
 
 export default app;
-export { server };
 
