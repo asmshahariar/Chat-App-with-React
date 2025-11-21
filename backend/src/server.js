@@ -3,15 +3,18 @@ import dotenv from "dotenv";
 import path from "path";
 import cookieParser from "cookie-parser";
 import cors from "cors";
+import { createServer } from "http";
 
 import authRoutes from "./routes/auth.route..js";
 import messageRoutes from "./routes/message.route.js";
 import { connectDB } from "./lib/db.js";
 import { ENV } from "./lib/env.js";
+import { initializeSocket } from "./lib/socket.js";
 
 dotenv.config();
 
 const app = express();
+const server = createServer(app);
 
 const __dirname = path.resolve();
 
@@ -60,13 +63,19 @@ if (ENV.NODE_ENV === "production") {
   });
 }
 
+// Initialize Socket.IO (only for local development, not for Vercel serverless)
+if (!process.env.VERCEL) {
+  initializeSocket(server);
+}
+
 // Start server locally (Vercel will use api/index.js)
 if (!process.env.VERCEL) {
-  app.listen(PORT, () => {
+  server.listen(PORT, () => {
     console.log("Server is running on port: " + PORT);
     connectDB();
   });
 }
 
 export default app;
+export { server };
 
