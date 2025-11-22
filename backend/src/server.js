@@ -75,7 +75,19 @@ app.get("/api/health", (req, res) => {
   res.json({ 
     status: "ok", 
     message: "Server is running",
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
+    vercel: !!process.env.VERCEL
+  });
+});
+
+// Simple test endpoint (no database, no auth)
+app.get("/api/test", (req, res) => {
+  res.json({
+    message: "API is working",
+    timestamp: new Date().toISOString(),
+    method: req.method,
+    path: req.path,
+    url: req.url
   });
 });
 
