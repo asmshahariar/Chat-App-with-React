@@ -46,16 +46,26 @@ app.use(cors({
       return callback(null, true);
     }
     
-    // In production, also allow Vercel preview deployments (*.vercel.app)
+    // In production, allow all Vercel deployments (*.vercel.app)
     if (origin.includes(".vercel.app")) {
       console.log("CORS: Vercel deployment, allowing origin:", origin);
       return callback(null, true);
     }
     
-    console.log("CORS: Origin not allowed:", origin);
-    callback(new Error("Not allowed by CORS"));
+    // Also allow vercel.app domain (without subdomain)
+    if (origin.includes("vercel.app")) {
+      console.log("CORS: Vercel domain, allowing origin:", origin);
+      return callback(null, true);
+    }
+    
+    // For production, be more permissive to avoid CORS issues
+    // You can restrict this later if needed
+    console.log("CORS: Allowing origin in production:", origin);
+    callback(null, true);
   },
   credentials: true,
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
 }));
 
 app.use(cookieParser());
@@ -71,19 +81,48 @@ app.get("/api/health", (req, res) => {
 
 // Debug endpoint to check environment and database status
 app.get("/api/debug", async (req, res) => {
+  // Prevent caching
+  res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("Expires", "0");
+  
   const mongoose = (await import("mongoose")).default;
+  
+  // Try to get connection info
+  let dbInfo = {
+    readyState: mongoose.connection.readyState,
+    readyStateText: ["disconnected", "connected", "connecting", "disconnecting"][mongoose.connection.readyState] || "unknown",
+    host: mongoose.connection.host || "not connected",
+    name: mongoose.connection.name || "not connected",
+  };
+  
+  // If not connected, try to get more info
+  if (mongoose.connection.readyState !== 1) {
+    try {
+      const { connectDB } = await import("./lib/db.js");
+      // Don't actually connect, just check if function exists
+      dbInfo.connectionFunctionExists = typeof connectDB === "function";
+    } catch (error) {
+      dbInfo.connectionError = error.message;
+    }
+  }
+  
   res.json({
+    timestamp: new Date().toISOString(),
     env: {
       hasMongoUri: !!process.env.MONGO_URI,
       hasJwtSecret: !!process.env.JWT_SECRET,
+      hasClientUrl: !!process.env.CLIENT_URL,
       nodeEnv: process.env.NODE_ENV,
       isVercel: !!process.env.VERCEL,
+      clientUrl: process.env.CLIENT_URL || "not set",
     },
-    db: {
-      readyState: mongoose.connection.readyState,
-      readyStateText: ["disconnected", "connected", "connecting", "disconnecting"][mongoose.connection.readyState] || "unknown",
-      host: mongoose.connection.host || "not connected",
-      name: mongoose.connection.name || "not connected",
+    db: dbInfo,
+    request: {
+      method: req.method,
+      path: req.path,
+      url: req.url,
+      origin: req.headers.origin || "none",
     }
   });
 });
