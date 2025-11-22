@@ -11,13 +11,6 @@
       "dest": "../api/index.js"
     }
   ],
-  "functions": {
-    "../api/index.js": {
-      "runtime": "nodejs20.x",
-      "memory": 1024,
-      "maxDuration": 60
-    }
-  },
   "env": {
     "NODE_ENV": "production"
   }
