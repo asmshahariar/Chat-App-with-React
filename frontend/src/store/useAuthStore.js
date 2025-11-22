@@ -16,10 +16,19 @@ export const useAuthStore = create((set, get) => ({
   checkAuth: async () => {
     try {
       const res = await axiosInstance.get("/auth/check");
-      set({ authUser: res.data });
-      get().connectSocket();
+      // Validate response data
+      if (res.data && res.data._id && res.data.fullName) {
+        set({ authUser: res.data });
+        get().connectSocket();
+      } else {
+        console.log("Invalid auth response data:", res.data);
+        set({ authUser: null });
+      }
     } catch (error) {
       console.log("Error in authCheck:", error);
+      console.log("Error response:", error.response?.data);
+      console.log("Error status:", error.response?.status);
+      // Ensure authUser is set to null on any error
       set({ authUser: null });
     } finally {
       set({ isCheckingAuth: false });

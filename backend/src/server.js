@@ -29,17 +29,31 @@ const allowedOrigins = [
 app.use(cors({
   origin: function (origin, callback) {
     // Allow requests with no origin (like mobile apps or curl requests)
-    if (!origin) return callback(null, true);
-    if (allowedOrigins.indexOf(origin) !== -1 || ENV.NODE_ENV === "development") {
-      callback(null, true);
-    } else {
-      // For development, allow all origins
-      if (ENV.NODE_ENV === "development") {
-        callback(null, true);
-      } else {
-        callback(new Error("Not allowed by CORS"));
-      }
+    if (!origin) {
+      console.log("CORS: No origin, allowing request");
+      return callback(null, true);
     }
+    
+    // Check if origin is in allowed list
+    if (allowedOrigins.indexOf(origin) !== -1) {
+      console.log("CORS: Origin allowed:", origin);
+      return callback(null, true);
+    }
+    
+    // Allow all origins in development
+    if (ENV.NODE_ENV === "development") {
+      console.log("CORS: Development mode, allowing origin:", origin);
+      return callback(null, true);
+    }
+    
+    // In production, also allow Vercel preview deployments (*.vercel.app)
+    if (origin.includes(".vercel.app")) {
+      console.log("CORS: Vercel deployment, allowing origin:", origin);
+      return callback(null, true);
+    }
+    
+    console.log("CORS: Origin not allowed:", origin);
+    callback(new Error("Not allowed by CORS"));
   },
   credentials: true,
 }));

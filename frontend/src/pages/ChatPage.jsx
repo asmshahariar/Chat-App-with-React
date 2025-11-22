@@ -1,5 +1,7 @@
 import { useChatStore } from "../store/useChatStore";
+import { useAuthStore } from "../store/useAuthStore";
 import { useState, useEffect } from "react";
+import { Navigate } from "react-router";
 
 import BorderAnimatedContainer from "../components/BorderAnimatedContainer";
 import ProfileHeader from "../components/ProfileHeader";
@@ -12,7 +14,13 @@ import ChatPageMobile from "./ChatPageMobile";
 
 function ChatPage() {
   const { activeTab, selectedUser } = useChatStore();
+  const { authUser } = useAuthStore();
   const [isMobile, setIsMobile] = useState(false);
+
+  // Redirect to login if not authenticated
+  if (!authUser || !authUser._id) {
+    return <Navigate to="/login" replace />;
+  }
 
   // Detect mobile screen size
   useEffect(() => {
