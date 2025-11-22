@@ -14,7 +14,8 @@ const __dirname = path.resolve();
 
 const PORT = ENV.PORT || 3000;
 
-app.use(express.json({ limit: "5mb" })); // req.body
+app.use(express.json({ limit: "50mb" })); // req.body - increased for base64 images
+app.use(express.urlencoded({ limit: "50mb", extended: true })); // For form data
 
 // CORS configuration - allow multiple origins
 const allowedOrigins = [
@@ -53,6 +54,25 @@ app.get("/api/health", (req, res) => {
   });
 });
 
+// Debug endpoint to check environment and database status
+app.get("/api/debug", async (req, res) => {
+  const mongoose = (await import("mongoose")).default;
+  res.json({
+    env: {
+      hasMongoUri: !!process.env.MONGO_URI,
+      hasJwtSecret: !!process.env.JWT_SECRET,
+      nodeEnv: process.env.NODE_ENV,
+      isVercel: !!process.env.VERCEL,
+    },
+    db: {
+      readyState: mongoose.connection.readyState,
+      readyStateText: ["disconnected", "connected", "connecting", "disconnecting"][mongoose.connection.readyState] || "unknown",
+      host: mongoose.connection.host || "not connected",
+      name: mongoose.connection.name || "not connected",
+    }
+  });
+});
+
 app.use("/api/auth", authRoutes);
 app.use("/api/messages", messageRoutes);
 app.use("/api/friends", friendRoutes);
@@ -66,7 +86,10 @@ if (ENV.NODE_ENV === "production") {
   });
 }
 
-server.listen(PORT, () => {
-  console.log("Server running on port: " + PORT);
-  connectDB();
-});
+// Only start server if not in Vercel serverless environment
+if (!process.env.VERCEL) {
+  server.listen(PORT, () => {
+    console.log("Server running on port: " + PORT);
+    connectDB();
+  });
+}

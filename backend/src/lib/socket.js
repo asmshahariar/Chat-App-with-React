@@ -5,30 +5,38 @@ import { ENV } from "./env.js";
 import { socketAuthMiddleware } from "../middleware/socket.auth.middleware.js";
 
 const app = express();
-const server = http.createServer(app);
 
-const allowedOrigins = [
-  ENV.CLIENT_URL,
-  "http://localhost:5173",
-  "http://localhost:3000",
-  "https://chat-app-with-react-three.vercel.app",
-].filter(Boolean);
+// Only create HTTP server and Socket.IO if not in Vercel serverless environment
+// In serverless, we just need the Express app (Socket.IO doesn't work in serverless)
+let server = null;
+let io = null;
 
-const io = new Server(server, {
-  cors: {
-    origin: function (origin, callback) {
-      if (!origin || allowedOrigins.indexOf(origin) !== -1 || ENV.NODE_ENV === "development") {
-        callback(null, true);
-      } else {
-        callback(new Error("Not allowed by CORS"));
-      }
+if (!process.env.VERCEL) {
+  server = http.createServer(app);
+
+  const allowedOrigins = [
+    ENV.CLIENT_URL,
+    "http://localhost:5173",
+    "http://localhost:3000",
+    "https://chat-app-with-react-three.vercel.app",
+  ].filter(Boolean);
+
+  io = new Server(server, {
+    cors: {
+      origin: function (origin, callback) {
+        if (!origin || allowedOrigins.indexOf(origin) !== -1 || ENV.NODE_ENV === "development") {
+          callback(null, true);
+        } else {
+          callback(new Error("Not allowed by CORS"));
+        }
+      },
+      credentials: true,
     },
-    credentials: true,
-  },
-});
+  });
 
-// apply authentication middleware to all socket connections
-io.use(socketAuthMiddleware);
+  // apply authentication middleware to all socket connections
+  io.use(socketAuthMiddleware);
+}
 
 // we will use this function to check if the user is online or not
 export function getReceiverSocketId(userId) {
@@ -50,7 +58,9 @@ const userSocketMap = {}; // {userId:socketId}
 // Store typing status: {userId: {receiverId: true/false}}
 const typingUsers = {}; // {userId: {receiverId: timestamp}}
 
-io.on("connection", (socket) => {
+// Only set up socket event handlers if io is initialized (not in serverless)
+if (io) {
+  io.on("connection", (socket) => {
   console.log("A user connected", socket.user.fullName);
 
   const userId = socket.userId.toString(); // Ensure userId is always a string
@@ -105,6 +115,8 @@ io.on("connection", (socket) => {
     delete typingUsers[userId];
     io.emit("getOnlineUsers", Object.keys(userSocketMap));
   });
-});
+  });
+}
 
+// Export a dummy io object for serverless (functions that use it should check if io exists)
 export { io, app, server };

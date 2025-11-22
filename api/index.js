@@ -10,6 +10,7 @@ let isConnecting = false;
 const ensureDBConnection = async () => {
   // If already connected, return
   if (mongoose.connection.readyState === 1) {
+    console.log("Database already connected (readyState: 1)");
     return true;
   }
 
@@ -17,7 +18,7 @@ const ensureDBConnection = async () => {
   if (dbConnectionPromise && isConnecting) {
     try {
       await dbConnectionPromise;
-      return true;
+      return mongoose.connection.readyState === 1;
     } catch (error) {
       console.error("DB connection promise failed:", error);
       dbConnectionPromise = null;
@@ -32,18 +33,21 @@ const ensureDBConnection = async () => {
     .then(() => {
       console.log("Database connected in serverless function");
       isConnecting = false;
-      return true;
+      return mongoose.connection.readyState === 1;
     })
     .catch((error) => {
       console.error("Failed to connect to database:", error);
+      console.error("Error stack:", error.stack);
       dbConnectionPromise = null;
       isConnecting = false;
       return false;
     });
 
   try {
-    return await dbConnectionPromise;
+    const result = await dbConnectionPromise;
+    return result === true || mongoose.connection.readyState === 1;
   } catch (error) {
+    console.error("Error awaiting DB connection:", error);
     return false;
   }
 };
@@ -53,9 +57,34 @@ ensureDBConnection().catch((error) => {
   console.error("Initial DB connection attempt failed (non-blocking):", error);
 });
 
-// Add error handling middleware
+// Add middleware to ensure DB connection before handling requests
+app.use(async (req, res, next) => {
+  // Skip DB check for health check and debug endpoints
+  if (req.path === "/api/health" || req.path === "/api/debug") {
+    return next();
+  }
+
+  try {
+    const connected = await ensureDBConnection();
+    if (!connected) {
+      console.error("Database connection failed for request:", req.path);
+      return res.status(503).json({ 
+        message: "Database connection unavailable. Please try again.",
+      });
+    }
+  } catch (error) {
+    console.error("DB connection error in middleware:", error);
+    return res.status(503).json({ 
+      message: "Database connection error. Please try again.",
+    });
+  }
+  next();
+});
+
+// Add error handling middleware (must be last)
 app.use((err, req, res, next) => {
   console.error("Unhandled error:", err);
+  console.error("Error stack:", err.stack);
   res.status(500).json({ 
     message: "Internal server error",
     error: process.env.NODE_ENV === "development" ? err.message : undefined
