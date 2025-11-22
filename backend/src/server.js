@@ -60,8 +60,16 @@ app.use(cors({
 
 app.use(cookieParser());
 
-// Health check endpoint (before auth)
+// Health check endpoint (before auth) - handle both with and without /api prefix
 app.get("/api/health", (req, res) => {
+  res.json({ 
+    status: "ok", 
+    message: "Server is running",
+    timestamp: new Date().toISOString()
+  });
+});
+
+app.get("/health", (req, res) => {
   res.json({ 
     status: "ok", 
     message: "Server is running",
@@ -84,13 +92,69 @@ app.get("/api/debug", async (req, res) => {
       readyStateText: ["disconnected", "connected", "connecting", "disconnecting"][mongoose.connection.readyState] || "unknown",
       host: mongoose.connection.host || "not connected",
       name: mongoose.connection.name || "not connected",
+    },
+    request: {
+      method: req.method,
+      url: req.url,
+      path: req.path,
+      originalUrl: req.originalUrl,
     }
   });
 });
 
+app.get("/debug", async (req, res) => {
+  const mongoose = (await import("mongoose")).default;
+  res.json({
+    env: {
+      hasMongoUri: !!process.env.MONGO_URI,
+      hasJwtSecret: !!process.env.JWT_SECRET,
+      nodeEnv: process.env.NODE_ENV,
+      isVercel: !!process.env.VERCEL,
+    },
+    db: {
+      readyState: mongoose.connection.readyState,
+      readyStateText: ["disconnected", "connected", "connecting", "disconnecting"][mongoose.connection.readyState] || "unknown",
+      host: mongoose.connection.host || "not connected",
+      name: mongoose.connection.name || "not connected",
+    },
+    request: {
+      method: req.method,
+      url: req.url,
+      path: req.path,
+      originalUrl: req.originalUrl,
+    }
+  });
+});
+
+// API routes
 app.use("/api/auth", authRoutes);
 app.use("/api/messages", messageRoutes);
 app.use("/api/friends", friendRoutes);
+
+// Also handle routes without /api prefix (for Vercel serverless)
+app.use("/auth", authRoutes);
+app.use("/messages", messageRoutes);
+app.use("/friends", friendRoutes);
+
+// Handle OPTIONS requests for CORS preflight
+app.options("*", (req, res) => {
+  res.header("Access-Control-Allow-Origin", req.headers.origin || "*");
+  res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+  res.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  res.header("Access-Control-Allow-Credentials", "true");
+  res.sendStatus(200);
+});
+
+// Catch-all for unmatched API routes (for debugging)
+app.use("/api/*", (req, res) => {
+  console.log("Unmatched API route:", req.method, req.path);
+  res.status(404).json({
+    message: "Route not found",
+    method: req.method,
+    path: req.path,
+    url: req.url
+  });
+});
 
 // make ready for deployment
 if (ENV.NODE_ENV === "production") {
