@@ -157,15 +157,21 @@ const initializeApp = async () => {
 };
 
 // Export handler function for Vercel
+// Vercel automatically routes /api/* to this function
 export default async (req, res) => {
   try {
     // Initialize app on first request
     const appInstance = await initializeApp();
     
-    // Handle the request
-    return appInstance(req, res);
+    // Log request for debugging
+    console.log(`[${req.method}] ${req.url || req.path}`);
+    
+    // Vercel passes the full path including /api, so Express routes should match
+    // Handle the request - Express will route it
+    appInstance(req, res);
   } catch (error) {
     console.error("Handler error:", error);
+    console.error("Error stack:", error.stack);
     if (!res.headersSent) {
       res.status(500).json({
         message: "Internal server error",

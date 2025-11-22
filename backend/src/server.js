@@ -135,7 +135,12 @@ app.use("/api/friends", friendRoutes);
 if (ENV.NODE_ENV === "production") {
   app.use(express.static(path.join(__dirname, "../frontend/dist")));
 
-  app.get("*", (_, res) => {
+  // Catch-all for frontend routes (exclude API routes)
+  app.get("*", (req, res, next) => {
+    // Don't catch API routes
+    if (req.path.startsWith("/api/")) {
+      return next();
+    }
     res.sendFile(path.join(__dirname, "../frontend", "dist", "index.html"));
   });
 }
