@@ -1,5 +1,6 @@
 import FriendRequest from "../models/FriendRequest.js";
 import User from "../models/User.js";
+import { getReceiverSocketId, io } from "../lib/socket.js";
 
 // Send a friend request
 export const sendFriendRequest = async (req, res) => {
@@ -53,6 +54,16 @@ export const sendFriendRequest = async (req, res) => {
     await friendRequest.populate("senderId", "fullName email profilePic");
     await friendRequest.populate("receiverId", "fullName email profilePic");
 
+    // Emit socket event to receiver if they're online
+    if (io) {
+      const receiverSocketId = getReceiverSocketId(receiverId.toString());
+      if (receiverSocketId) {
+        // Convert to plain object for socket emission
+        const friendRequestObj = friendRequest.toObject ? friendRequest.toObject() : friendRequest;
+        io.to(receiverSocketId).emit("newFriendRequest", friendRequestObj);
+      }
+    }
+
     res.status(201).json(friendRequest);
   } catch (error) {
     console.error("Error in sendFriendRequest:", error);
@@ -101,6 +112,19 @@ export const acceptFriendRequest = async (req, res) => {
     await friendRequest.populate("senderId", "fullName email profilePic");
     await friendRequest.populate("receiverId", "fullName email profilePic");
 
+    // Emit socket events to both users to update their friend lists
+    if (io) {
+      const senderSocketId = getReceiverSocketId(friendRequest.senderId.toString());
+      const receiverSocketId = getReceiverSocketId(friendRequest.receiverId.toString());
+      
+      if (senderSocketId) {
+        io.to(senderSocketId).emit("friendRequestAccepted", friendRequest);
+      }
+      if (receiverSocketId) {
+        io.to(receiverSocketId).emit("friendRequestAccepted", friendRequest);
+      }
+    }
+
     res.status(200).json(friendRequest);
   } catch (error) {
     console.error("Error in acceptFriendRequest:", error);
@@ -133,6 +157,15 @@ export const rejectFriendRequest = async (req, res) => {
     friendRequest.status = "rejected";
     await friendRequest.save();
 
+    // Emit socket event to sender if they're online
+    if (io) {
+      const senderSocketId = getReceiverSocketId(friendRequest.senderId.toString());
+      if (senderSocketId) {
+        const friendRequestObj = friendRequest.toObject ? friendRequest.toObject() : friendRequest;
+        io.to(senderSocketId).emit("friendRequestRejected", friendRequestObj);
+      }
+    }
+
     res.status(200).json({ message: "Friend request rejected", friendRequest });
   } catch (error) {
     console.error("Error in rejectFriendRequest:", error);
@@ -162,6 +195,17 @@ export const cancelFriendRequest = async (req, res) => {
     }
 
     await FriendRequest.findByIdAndDelete(requestId);
+
+    // Emit socket event to receiver if they're online
+    if (io) {
+      const receiverSocketId = getReceiverSocketId(friendRequest.receiverId.toString());
+      if (receiverSocketId) {
+        io.to(receiverSocketId).emit("friendRequestCancelled", {
+          requestId: requestId.toString(),
+          senderId: friendRequest.senderId.toString(),
+        });
+      }
+    }
 
     res.status(200).json({ message: "Friend request cancelled" });
   } catch (error) {

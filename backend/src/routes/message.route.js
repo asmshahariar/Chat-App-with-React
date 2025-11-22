@@ -4,6 +4,7 @@ import {
   getChatPartners,
   getMessagesByUserId,
   sendMessage,
+  markMessageAsViewed,
 } from "../controllers/message.controller.js";
 import { protectRoute } from "../middleware/auth.middleware.js";
 import { arcjetProtection } from "../middleware/arcjet.middleware.js";
@@ -27,6 +28,7 @@ router.get("/test", (req, res) => {
 router.get("/contacts", getAllContacts);
 router.get("/chats", getChatPartners);
 router.post("/send/:id", sendMessage);
+router.put("/view/:messageId", markMessageAsViewed);
 router.get("/:id", getMessagesByUserId); // This must be last to avoid catching /contacts or /chats
 
 export default router;

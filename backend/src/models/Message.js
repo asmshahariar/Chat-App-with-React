@@ -20,6 +20,29 @@ const messageSchema = new mongoose.Schema(
     image: {
       type: String,
     },
+    file: {
+      type: String, // File URL
+    },
+    fileName: {
+      type: String, // Original file name
+    },
+    fileType: {
+      type: String, // MIME type (e.g., 'application/pdf', 'image/jpeg')
+    },
+    fileSize: {
+      type: Number, // File size in bytes
+    },
+    isDisappearing: {
+      type: Boolean,
+      default: false,
+    },
+    isViewed: {
+      type: Boolean,
+      default: false,
+    },
+    viewedAt: {
+      type: Date,
+    },
   },
   { timestamps: true }
 );

@@ -19,7 +19,11 @@ function ChatHeader() {
     return () => window.removeEventListener("keydown", handleEscKey);
   }, [setSelectedUser]);
 
-  const handleBack = () => {
+  const handleBack = (e) => {
+    if (e) {
+      e.stopPropagation();
+      e.preventDefault();
+    }
     setSelectedUser(null);
   };
 
@@ -31,11 +35,22 @@ function ChatHeader() {
       <div className="flex items-center space-x-3">
         {/* Mobile Back Button */}
         <button 
-          onClick={handleBack}
-          className="md:hidden p-2 -ml-2 text-slate-400 hover:text-slate-200 transition-colors"
+          onClick={(e) => {
+            e.stopPropagation();
+            e.preventDefault();
+            handleBack(e);
+          }}
+          onTouchEnd={(e) => {
+            e.stopPropagation();
+            e.preventDefault();
+            handleBack(e);
+          }}
+          className="md:hidden p-3 -ml-2 text-slate-400 hover:text-slate-200 active:text-slate-100 active:bg-slate-700/30 transition-colors touch-manipulation z-50 relative cursor-pointer rounded-lg"
           aria-label="Back to chats"
+          type="button"
+          style={{ WebkitTapHighlightColor: 'transparent', minWidth: '44px', minHeight: '44px' }}
         >
-          <ArrowLeft className="w-5 h-5" />
+          <ArrowLeft className="w-5 h-5 pointer-events-none" />
         </button>
 
         <div className="avatar relative">
