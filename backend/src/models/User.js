@@ -1,6 +1,5 @@
 import mongoose from "mongoose";
 
-
 const userSchema = new mongoose.Schema(
   {
     email: {
@@ -17,15 +16,20 @@ const userSchema = new mongoose.Schema(
       required: true,
       minlength: 6,
     },
-    profilePic: {
-      type: String,
-      default: "",
-    },
+  profilePic: {
+    type: String,
+    default: "",
   },
-  {timestamps: true} //createdAt, updatedAt
+  friends: [
+    {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+    },
+  ],
+  },
+  { timestamps: true } // createdAt & updatedAt
 );
 
-const User = mongoose.model("User", userSchema)
-
+const User = mongoose.model("User", userSchema);
 
 export default User;

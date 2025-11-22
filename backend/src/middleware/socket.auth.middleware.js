@@ -1,48 +1,43 @@
 import jwt from "jsonwebtoken";
-import { ENV } from "../lib/env.js";
 import User from "../models/User.js";
+import { ENV } from "../lib/env.js";
 
 export const socketAuthMiddleware = async (socket, next) => {
   try {
-    // Get token from cookies (httpOnly cookie sent automatically with credentials)
-    const cookies = socket.handshake.headers?.cookie || "";
-    const tokenMatch = cookies.match(/jwt=([^;]+)/);
-    const token = tokenMatch ? tokenMatch[1] : null;
+    // extract token from http-only cookies
+    const token = socket.handshake.headers.cookie
+      ?.split("; ")
+      .find((row) => row.startsWith("jwt="))
+      ?.split("=")[1];
 
     if (!token) {
-      console.log("Socket auth: No token found in cookies");
-      return next(new Error("Authentication error: No token provided"));
+      console.log("Socket connection rejected: No token provided");
+      return next(new Error("Unauthorized - No Token Provided"));
     }
 
-    // Verify token
+    // verify the token
     const decoded = jwt.verify(token, ENV.JWT_SECRET);
-    
-    if (!decoded || !decoded.userId) {
-      console.log("Socket auth: Invalid token decode");
-      return next(new Error("Authentication error: Invalid token"));
+    if (!decoded) {
+      console.log("Socket connection rejected: Invalid token");
+      return next(new Error("Unauthorized - Invalid Token"));
     }
 
-    // Get user from database
+    // find the user fromdb
     const user = await User.findById(decoded.userId).select("-password");
-    
     if (!user) {
-      console.log("Socket auth: User not found");
-      return next(new Error("Authentication error: User not found"));
+      console.log("Socket connection rejected: User not found");
+      return next(new Error("User not found"));
     }
 
-    // Attach user to socket
+    // attach user info to socket
     socket.user = user;
     socket.userId = user._id.toString();
 
+    console.log(`Socket authenticated for user: ${user.fullName} (${user._id})`);
+
     next();
   } catch (error) {
-    console.error("Socket auth error:", error);
-    // Don't block connection if auth fails - just log it
-    // In production, you might want to be stricter
-    if (error.name === "JsonWebTokenError" || error.name === "TokenExpiredError") {
-      return next(new Error("Authentication error: " + error.message));
-    }
-    next(new Error("Authentication error: " + error.message));
+    console.log("Error in socket authentication:", error.message);
+    next(new Error("Unauthorized - Authentication failed"));
   }
 };
-
