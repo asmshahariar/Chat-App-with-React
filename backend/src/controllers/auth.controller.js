@@ -7,13 +7,19 @@ import cloudinary from "../lib/cloudinary.js";
 import mongoose from "mongoose";
 
 export const signup = async (req, res) => {
-  const { fullName, email, password } = req.body;
-
   try {
+    const { fullName, email, password } = req.body;
+
     // Check if JWT_SECRET is configured
     if (!ENV.JWT_SECRET) {
       console.error("JWT_SECRET is not configured");
-      return res.status(500).json({ message: "Server configuration error" });
+      return res.status(500).json({ message: "Server configuration error: JWT_SECRET missing" });
+    }
+
+    // Check if MONGO_URI is configured
+    if (!ENV.MONGO_URI) {
+      console.error("MONGO_URI is not configured");
+      return res.status(500).json({ message: "Server configuration error: MONGO_URI missing" });
     }
 
     if (!fullName || !email || !password) {
@@ -96,17 +102,23 @@ export const signup = async (req, res) => {
 };
 
 export const login = async (req, res) => {
-  const { email, password } = req.body;
-
-  if (!email || !password) {
-    return res.status(400).json({ message: "Email and password are required" });
-  }
-
   try {
+    const { email, password } = req.body;
+
+    if (!email || !password) {
+      return res.status(400).json({ message: "Email and password are required" });
+    }
+
     // Check if JWT_SECRET is configured
     if (!ENV.JWT_SECRET) {
       console.error("JWT_SECRET is not configured");
-      return res.status(500).json({ message: "Server configuration error" });
+      return res.status(500).json({ message: "Server configuration error: JWT_SECRET missing" });
+    }
+
+    // Check if MONGO_URI is configured
+    if (!ENV.MONGO_URI) {
+      console.error("MONGO_URI is not configured");
+      return res.status(500).json({ message: "Server configuration error: MONGO_URI missing" });
     }
 
     // Case-insensitive email search

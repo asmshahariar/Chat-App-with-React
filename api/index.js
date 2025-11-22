@@ -85,9 +85,16 @@ app.use(async (req, res, next) => {
 app.use((err, req, res, next) => {
   console.error("Unhandled error:", err);
   console.error("Error stack:", err.stack);
+  console.error("Request path:", req.path);
+  console.error("Request method:", req.method);
+  
+  // Return more details for debugging
   res.status(500).json({ 
     message: "Internal server error",
-    error: process.env.NODE_ENV === "development" ? err.message : undefined
+    error: err.message,
+    path: req.path,
+    // Only show stack in development
+    stack: process.env.NODE_ENV === "development" ? err.stack : undefined
   });
 });
 
