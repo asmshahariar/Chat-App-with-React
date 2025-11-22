@@ -4,11 +4,18 @@ import User from "../models/User.js";
 import bcrypt from "bcryptjs";
 import { ENV } from "../lib/env.js";
 import cloudinary from "../lib/cloudinary.js";
+import mongoose from "mongoose";
 
 export const signup = async (req, res) => {
   const { fullName, email, password } = req.body;
 
   try {
+    // Check if JWT_SECRET is configured
+    if (!ENV.JWT_SECRET) {
+      console.error("JWT_SECRET is not configured");
+      return res.status(500).json({ message: "Server configuration error" });
+    }
+
     if (!fullName || !email || !password) {
       return res.status(400).json({ message: "All fields are required" });
     }
@@ -21,6 +28,12 @@ export const signup = async (req, res) => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
       return res.status(400).json({ message: "Invalid email format" });
+    }
+
+    // Check database connection
+    if (mongoose.connection.readyState !== 1) {
+      console.error("Database not connected. ReadyState:", mongoose.connection.readyState);
+      return res.status(503).json({ message: "Database connection unavailable. Please try again." });
     }
 
     // Case-insensitive email check
@@ -63,8 +76,22 @@ export const signup = async (req, res) => {
       res.status(400).json({ message: "Invalid user data" });
     }
   } catch (error) {
-    console.log("Error in signup controller:", error);
-    res.status(500).json({ message: "Internal server error" });
+    console.error("Error in signup controller:", error);
+    console.error("Error stack:", error.stack);
+    console.error("Error details:", {
+      message: error.message,
+      name: error.name,
+      code: error.code,
+      dbReadyState: mongoose.connection.readyState
+    });
+    
+    // Return more detailed error for debugging (even in production for now)
+    res.status(500).json({ 
+      message: "Internal server error",
+      error: error.message,
+      errorCode: error.code,
+      dbConnected: mongoose.connection.readyState === 1
+    });
   }
 };
 
@@ -76,6 +103,12 @@ export const login = async (req, res) => {
   }
 
   try {
+    // Check if JWT_SECRET is configured
+    if (!ENV.JWT_SECRET) {
+      console.error("JWT_SECRET is not configured");
+      return res.status(500).json({ message: "Server configuration error" });
+    }
+
     // Case-insensitive email search
     const user = await User.findOne({ email: email.toLowerCase().trim() });
     if (!user) {
@@ -107,7 +140,15 @@ export const login = async (req, res) => {
   } catch (error) {
     console.error("Error in login controller:", error);
     console.error("Error stack:", error.stack);
-    res.status(500).json({ message: "Internal server error" });
+    console.error("Error details:", {
+      message: error.message,
+      name: error.name,
+      code: error.code
+    });
+    res.status(500).json({ 
+      message: "Internal server error",
+      error: process.env.NODE_ENV === "development" ? error.message : undefined
+    });
   }
 };
 

@@ -111,11 +111,14 @@ export const sendMessage = async (req, res) => {
 
     await newMessage.save();
 
-    const receiverSocketId = getReceiverSocketId(receiverId.toString());
-    if (receiverSocketId) {
-      // Convert message to plain object for socket emission
-      const messageObj = newMessage.toObject ? newMessage.toObject() : newMessage;
-      io.to(receiverSocketId).emit("newMessage", messageObj);
+    // Only emit socket event if io is available (not in serverless)
+    if (io) {
+      const receiverSocketId = getReceiverSocketId(receiverId.toString());
+      if (receiverSocketId) {
+        // Convert message to plain object for socket emission
+        const messageObj = newMessage.toObject ? newMessage.toObject() : newMessage;
+        io.to(receiverSocketId).emit("newMessage", messageObj);
+      }
     }
 
     res.status(201).json(newMessage);
