@@ -35,7 +35,9 @@ export const useAuthStore = create((set, get) => ({
       toast.success("Account created successfully!");
       get().connectSocket();
     } catch (error) {
-      toast.error(error.response.data.message);
+      console.error("Signup error:", error);
+      const errorMessage = error.response?.data?.message || error.message || "Failed to create account";
+      toast.error(errorMessage);
     } finally {
       set({ isSigningUp: false });
     }
@@ -51,7 +53,9 @@ export const useAuthStore = create((set, get) => ({
 
       get().connectSocket();
     } catch (error) {
-      toast.error(error.response.data.message);
+      console.error("Login error:", error);
+      const errorMessage = error.response?.data?.message || error.message || "Failed to login";
+      toast.error(errorMessage);
     } finally {
       set({ isLoggingIn: false });
     }
@@ -76,7 +80,8 @@ export const useAuthStore = create((set, get) => ({
       toast.success("Profile updated successfully");
     } catch (error) {
       console.log("Error in update profile:", error);
-      toast.error(error.response.data.message);
+      const errorMessage = error.response?.data?.message || error.message || "Failed to update profile";
+      toast.error(errorMessage);
     }
   },
 
@@ -100,13 +105,47 @@ export const useAuthStore = create((set, get) => ({
     });
 
     socket.on("connect", () => {
-      console.log("Socket connected");
+      console.log("✅ Socket connected successfully");
       // Request online users when connected
       socket.emit("request-online-users");
+      
+      // Re-subscribe to messages if there's a selected user
+      import("./useChatStore").then(({ useChatStore }) => {
+        const chatState = useChatStore.getState();
+        if (chatState.selectedUser) {
+          console.log("Re-subscribing to messages after socket connect");
+          chatState.subscribeToMessages();
+        }
+      });
+      
+      // Subscribe to friend requests after socket connects
+      import("./useFriendStore").then(({ useFriendStore }) => {
+        useFriendStore.getState().subscribeToFriendRequests();
+      });
     });
 
     socket.on("connect_error", (error) => {
       console.error("Socket connection error:", error);
+    });
+
+    socket.on("reconnect", () => {
+      console.log("✅ Socket reconnected");
+      // Request online users when reconnected
+      socket.emit("request-online-users");
+      
+      // Re-subscribe to messages if there's a selected user
+      import("./useChatStore").then(({ useChatStore }) => {
+        const chatState = useChatStore.getState();
+        if (chatState.selectedUser) {
+          console.log("Re-subscribing to messages after socket reconnect");
+          chatState.subscribeToMessages();
+        }
+      });
+      
+      // Re-subscribe to friend requests on reconnect
+      import("./useFriendStore").then(({ useFriendStore }) => {
+        useFriendStore.getState().subscribeToFriendRequests();
+      });
     });
 
     // listen for online users event

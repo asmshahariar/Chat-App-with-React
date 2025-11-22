@@ -21,6 +21,11 @@ export const useChatStore = create((set, get) => ({
 
   setActiveTab: (tab) => set({ activeTab: tab }),
   setSelectedUser: (selectedUser) => {
+    // If null, just set it to null
+    if (!selectedUser) {
+      set({ selectedUser: null });
+      return;
+    }
     // Ensure isFriend property is preserved
     const userWithFriendStatus = {
       ...selectedUser,
@@ -68,11 +73,22 @@ export const useChatStore = create((set, get) => ({
 
   getMessagesByUserId: async (userId) => {
     set({ isMessagesLoading: true });
+    set({ messages: [] }); // Clear messages while loading new ones
     try {
       const res = await axiosInstance.get(`/messages/${userId}`);
-      set({ messages: res.data });
+      // Ensure messages are properly formatted with normalized IDs
+      const normalizedMessages = res.data.map((msg) => ({
+        ...msg,
+        senderId: msg.senderId?._id || msg.senderId,
+        receiverId: msg.receiverId?._id || msg.receiverId,
+      }));
+      set({ messages: normalizedMessages });
     } catch (error) {
-      toast.error(error.response?.data?.message || "Something went wrong");
+      // Only show toast if it's not a "no messages" scenario (e.g., 404)
+      if (error.response?.status !== 404) {
+        toast.error(error.response?.data?.message || "Something went wrong fetching messages");
+      }
+      set({ messages: [] }); // Ensure messages are empty on error
     } finally {
       set({ isMessagesLoading: false });
     }
@@ -90,28 +106,39 @@ export const useChatStore = create((set, get) => ({
 
     const tempId = `temp-${Date.now()}`;
 
-    const optimisticMessage = {
-      _id: tempId,
-      senderId: authUser._id,
-      receiverId: selectedUser._id,
-      text: messageData.text,
-      image: messageData.image,
-      createdAt: new Date().toISOString(),
-      isOptimistic: true,
-    };
+            const optimisticMessage = {
+              _id: tempId,
+              senderId: authUser._id.toString(), // Ensure it's a string
+              receiverId: selectedUser._id.toString(), // Ensure it's a string
+              text: messageData.text,
+              image: messageData.image,
+              file: messageData.file ? (messageData.file.startsWith('data:') ? null : messageData.file) : null, // Don't store base64 in optimistic message
+              fileName: messageData.fileName || null,
+              fileType: messageData.fileType || null,
+              fileSize: messageData.fileSize || null,
+              createdAt: new Date().toISOString(),
+              isOptimistic: true,
+            };
     // Immediately update the UI by adding the message
     set({ messages: [...messages, optimisticMessage] });
 
-    try {
-      const res = await axiosInstance.post(`/messages/send/${selectedUser._id}`, messageData);
-      const savedMessage = res.data;
-      
-      // Replace optimistic message with real message from server
-      set((state) => ({
-        messages: state.messages.map((msg) =>
-          msg._id === tempId ? savedMessage : msg
-        ),
-      }));
+            try {
+              const res = await axiosInstance.post(`/messages/send/${selectedUser._id}`, messageData);
+              const savedMessage = res.data;
+              
+              // Normalize the saved message
+              const normalizedSavedMessage = {
+                ...savedMessage,
+                senderId: savedMessage.senderId?._id || savedMessage.senderId,
+                receiverId: savedMessage.receiverId?._id || savedMessage.receiverId,
+              };
+              
+              // Replace optimistic message with real message from server
+              set((state) => ({
+                messages: state.messages.map((msg) =>
+                  msg._id === tempId ? normalizedSavedMessage : msg
+                ),
+              }));
     } catch (error) {
       // Remove optimistic message on failure
       set({ messages: messages.filter((msg) => msg._id !== tempId) });
@@ -138,10 +165,23 @@ export const useChatStore = create((set, get) => ({
 
   subscribeToMessages: () => {
     const { selectedUser, isSoundEnabled } = get();
-    if (!selectedUser) return;
+    if (!selectedUser) {
+      return;
+    }
 
     const socket = useAuthStore.getState().socket;
-    if (!socket) return;
+    if (!socket) {
+      // Try to connect socket if not available
+      const { connectSocket } = useAuthStore.getState();
+      connectSocket();
+      // Wait a bit and retry
+      setTimeout(() => {
+        if (useAuthStore.getState().socket) {
+          get().subscribeToMessages();
+        }
+      }, 500);
+      return;
+    }
     
     if (!socket.connected) {
       socket.once("connect", () => {
@@ -150,21 +190,66 @@ export const useChatStore = create((set, get) => ({
       return;
     }
 
+    // Remove any existing listeners to prevent duplicates
+    socket.off("newMessage");
+    
     socket.on("newMessage", (newMessage) => {
-      // Normalize IDs for comparison
-      const messageSenderId = newMessage.senderId?.toString();
-      const selectedUserIdStr = selectedUser._id?.toString();
+      console.log("📨 Received newMessage via socket:", newMessage);
+      
+      // Normalize IDs for comparison - handle both object and string formats
+      const messageSenderId = newMessage.senderId?._id?.toString() || newMessage.senderId?.toString();
+      const messageReceiverId = newMessage.receiverId?._id?.toString() || newMessage.receiverId?.toString();
+      
+      const currentState = get();
+      const selectedUserIdStr = currentState.selectedUser?._id?.toString();
       const currentUserId = useAuthStore.getState().authUser?._id?.toString();
       
-      // Check if message is from selected user OR if it's a message sent to current user
-      const isFromSelectedUser = messageSenderId === selectedUserIdStr;
-      const isToCurrentUser = newMessage.receiverId?.toString() === currentUserId;
+      console.log("Message IDs:", {
+        messageSenderId,
+        messageReceiverId,
+        selectedUserIdStr,
+        currentUserId
+      });
       
-      // Only add message if it's from the selected user (when viewing their chat) 
-      // OR if it's sent to current user (real-time update)
-      if (!isFromSelectedUser && !isToCurrentUser) {
-        return;
+      if (!currentUserId) {
+        console.log("❌ No current user");
+        return; // No current user, skip
       }
+      
+      // Check if message involves the current user (either as sender or receiver)
+      const isToCurrentUser = messageReceiverId === currentUserId;
+      const isFromCurrentUser = messageSenderId === currentUserId;
+      
+      console.log("Message checks:", {
+        isToCurrentUser,
+        isFromCurrentUser
+      });
+      
+      // Only process messages that involve the current user
+      if (!isToCurrentUser && !isFromCurrentUser) {
+        console.log("❌ Message doesn't involve current user");
+        return; // Message doesn't involve current user, skip
+      }
+      
+      // If there's a selected user, only add message if it's between current user and selected user
+      if (selectedUserIdStr) {
+        const isBetweenCurrentAndSelected = 
+          (messageSenderId === currentUserId && messageReceiverId === selectedUserIdStr) ||
+          (messageSenderId === selectedUserIdStr && messageReceiverId === currentUserId);
+        
+        console.log("Between check:", {
+          isBetweenCurrentAndSelected,
+          condition1: messageSenderId === currentUserId && messageReceiverId === selectedUserIdStr,
+          condition2: messageSenderId === selectedUserIdStr && messageReceiverId === currentUserId
+        });
+        
+        if (!isBetweenCurrentAndSelected) {
+          console.log("❌ Message not between current and selected user");
+          return; // Not viewing this chat, skip adding to messages
+        }
+      }
+      
+      console.log("✅ Message passed all checks, adding to messages");
 
       const currentMessages = get().messages;
       // Check if message already exists (avoid duplicates)
@@ -173,16 +258,49 @@ export const useChatStore = create((set, get) => ({
       );
       
       if (messageExists) {
+        // Update existing message (in case it was optimistic)
+        set((state) => ({
+          messages: state.messages.map((msg) =>
+            msg._id?.toString() === newMessage._id?.toString() ? newMessage : msg
+          ),
+        }));
         return;
       }
 
-      set({ messages: [...currentMessages, newMessage] });
-
-      if (isSoundEnabled && isToCurrentUser) {
+      // Normalize the new message before adding
+      const normalizedMessage = {
+        ...newMessage,
+        senderId: newMessage.senderId?._id || newMessage.senderId,
+        receiverId: newMessage.receiverId?._id || newMessage.receiverId,
+      };
+      
+      console.log("Adding normalized message:", normalizedMessage);
+      
+      // Add new message immediately
+      set((state) => {
+        const updatedMessages = [...state.messages, normalizedMessage];
+        console.log("Updated messages count:", updatedMessages.length);
+        return { messages: updatedMessages };
+      });
+      
+      // Only play sound if message is for current user (not sent by them)
+      if (isSoundEnabled && !isFromCurrentUser) {
         const notificationSound = new Audio("/sounds/notification.mp3");
         notificationSound.currentTime = 0;
         notificationSound.play().catch((e) => console.log("Audio play failed:", e));
       }
+    });
+    
+    console.log("✅ Socket listener set up for newMessage");
+
+    // Listen for message viewed event (for disappearing photos)
+    socket.on("messageViewed", (data) => {
+      const { messageId } = data;
+      set((state) => ({
+        messages: state.messages.map((msg) =>
+          msg._id?.toString() === messageId ? { ...msg, isViewed: true, viewedAt: data.viewedAt } : msg
+        ),
+      }));
     });
 
     socket.on("user-typing", (data) => {
@@ -216,6 +334,15 @@ export const useChatStore = create((set, get) => ({
       socket.off("newMessage");
       socket.off("user-typing");
       socket.off("user-stopped-typing");
+      socket.off("messageViewed");
+    }
+  },
+
+  markMessageAsViewed: async (messageId) => {
+    try {
+      await axiosInstance.put(`/messages/view/${messageId}`);
+    } catch (error) {
+      console.error("Error marking message as viewed:", error);
     }
   },
 }));
