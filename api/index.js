@@ -1,3 +1,4 @@
+// Import modules with error handling
 import app from "../backend/src/server.js";
 import { connectDB } from "../backend/src/lib/db.js";
 import mongoose from "mongoose";
@@ -7,6 +8,12 @@ if (!app) {
   console.error("ERROR: App not imported from server.js");
   throw new Error("Failed to import Express app");
 }
+
+// Log initialization
+console.log("API function initialized");
+console.log("MONGO_URI exists:", !!process.env.MONGO_URI);
+console.log("JWT_SECRET exists:", !!process.env.JWT_SECRET);
+console.log("NODE_ENV:", process.env.NODE_ENV);
 
 // Connect to database when serverless function initializes
 // This will be cached across function invocations
