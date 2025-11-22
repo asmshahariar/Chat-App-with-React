@@ -23,6 +23,7 @@ const allowedOrigins = [
   "http://localhost:5173",
   "http://localhost:3000",
   "https://chat-app-with-react-three.vercel.app",
+  "https://chat-two-react.vercel.app",
 ].filter(Boolean); // Remove undefined values
 
 app.use(cors({
@@ -88,8 +89,13 @@ if (ENV.NODE_ENV === "production") {
 
 // Only start server if not in Vercel serverless environment
 if (!process.env.VERCEL) {
-  server.listen(PORT, () => {
-    console.log("Server running on port: " + PORT);
-    connectDB();
-  });
+  if (server) {
+    server.listen(PORT, () => {
+      console.log("Server running on port: " + PORT);
+      connectDB();
+    });
+  }
 }
+
+// Export app for Vercel serverless functions
+export default app;
