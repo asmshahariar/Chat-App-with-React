@@ -12,68 +12,32 @@ function ProfileHeader() {
 
   const fileInputRef = useRef(null);
 
-  const compressImage = (file, maxWidth = 400, quality = 0.8) => {
-    return new Promise((resolve) => {
-      const reader = new FileReader();
-      reader.readAsDataURL(file);
-      reader.onload = (event) => {
-        const img = new Image();
-        img.src = event.target.result;
-        img.onload = () => {
-          const canvas = document.createElement('canvas');
-          let width = img.width;
-          let height = img.height;
-
-          // Calculate new dimensions
-          if (width > maxWidth) {
-            height = (height * maxWidth) / width;
-            width = maxWidth;
-          }
-
-          canvas.width = width;
-          canvas.height = height;
-
-          const ctx = canvas.getContext('2d');
-          ctx.drawImage(img, 0, 0, width, height);
-
-          // Convert to base64 with compression
-          const compressedBase64 = canvas.toDataURL('image/jpeg', quality);
-          resolve(compressedBase64);
-        };
-      };
-    });
-  };
-
-  const handleImageUpload = async (e) => {
+  const handleImageUpload = (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
-    // Compress image before uploading
-    const compressedImage = await compressImage(file, 400, 0.8);
-    setSelectedImg(compressedImage); // Show immediately for better UX
-    
-    try {
-      await updateProfile({ profilePic: compressedImage });
-      // After successful update, authUser.profilePic will have the Cloudinary URL
-      // The image src will use authUser.profilePic (which takes priority)
-    } catch (error) {
-      // If update fails, keep the selectedImg for retry
-      console.error("Failed to update profile picture:", error);
-    }
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+
+    reader.onloadend = async () => {
+      const base64Image = reader.result;
+      setSelectedImg(base64Image);
+      await updateProfile({ profilePic: base64Image });
+    };
   };
 
   return (
-    <div className="p-6 border-b border-slate-700/50">
+    <div className="p-4 md:p-6 border-b border-slate-700/50">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           {/* AVATAR */}
-          <div className="avatar online">
+          <div className="avatar relative">
             <button
-              className="size-14 rounded-full overflow-hidden relative group"
+              className="size-12 md:size-14 rounded-full overflow-hidden relative group ring-2 ring-cyan-500/20"
               onClick={() => fileInputRef.current.click()}
             >
               <img
-                src={authUser?.profilePic || selectedImg || "/avatar.png"}
+                src={selectedImg || authUser.profilePic || "/avatar.png"}
                 alt="User image"
                 className="size-full object-cover"
               />
@@ -81,6 +45,7 @@ function ProfileHeader() {
                 <span className="text-white text-xs">Change</span>
               </div>
             </button>
+            <span className="absolute bottom-0 right-0 size-3 md:size-3.5 bg-green-500 border-2 border-slate-800 rounded-full z-10 shadow-lg shadow-green-500/50"></span>
 
             <input
               type="file"

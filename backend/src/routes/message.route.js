@@ -12,13 +12,21 @@ const router = express.Router();
 
 // the middlewares execute in order - so requests get rate-limited first, then authenticated.
 // this is actually more efficient since unauthenticated requests get blocked by rate limiting before hitting the auth middleware.
-// Temporarily comment out arcjet to test
+// Temporarily disable arcjet to debug contacts issue
+router.use(protectRoute);
 // router.use(arcjetProtection, protectRoute);
-router.use( arcjetProtection, protectRoute);
 
-router.get("/contacts", arcjetProtection, getAllContacts);
+// IMPORTANT: Specific routes must come before parameterized routes like /:id
+// Otherwise /contacts will match /:id with id="contacts"
+
+// Debug endpoint to test route
+router.get("/test", (req, res) => {
+  res.json({ message: "Messages route is working", user: req.user?._id || "No user" });
+});
+
+router.get("/contacts", getAllContacts);
 router.get("/chats", getChatPartners);
-router.get("/:id", getMessagesByUserId);
 router.post("/send/:id", sendMessage);
+router.get("/:id", getMessagesByUserId); // This must be last to avoid catching /contacts or /chats
 
 export default router;

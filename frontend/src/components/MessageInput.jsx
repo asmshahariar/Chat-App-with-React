@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useRef, useState, useEffect } from "react";
 import useKeyboardSound from "../hooks/useKeyboardSound";
 import { useChatStore } from "../store/useChatStore";
 import toast from "react-hot-toast";
@@ -8,15 +8,66 @@ function MessageInput() {
   const { playRandomKeyStrokeSound } = useKeyboardSound();
   const [text, setText] = useState("");
   const [imagePreview, setImagePreview] = useState(null);
+  const typingTimeoutRef = useRef(null);
 
   const fileInputRef = useRef(null);
 
-  const { sendMessage, isSoundEnabled } = useChatStore();
+  const { sendMessage, isSoundEnabled, selectedUser, emitTypingStart, emitTypingStop } = useChatStore();
+
+  // Don't render if no user is selected
+  if (!selectedUser) {
+    return null;
+  }
+
+  // Handle typing indicator
+  useEffect(() => {
+    if (!selectedUser) return;
+
+    // Clear existing timeout
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
+
+    // If user is typing, emit typing-start
+    if (text.trim()) {
+      emitTypingStart(selectedUser._id);
+
+      // Set timeout to stop typing after 3 seconds of inactivity
+      typingTimeoutRef.current = setTimeout(() => {
+        emitTypingStop(selectedUser._id);
+      }, 3000);
+    } else {
+      // If text is empty, stop typing immediately
+      emitTypingStop(selectedUser._id);
+    }
+
+    // Cleanup on unmount or when selectedUser changes
+    return () => {
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+      }
+      if (selectedUser) {
+        emitTypingStop(selectedUser._id);
+      }
+    };
+  }, [text, selectedUser, emitTypingStart, emitTypingStop]);
 
   const handleSendMessage = (e) => {
     e.preventDefault();
     if (!text.trim() && !imagePreview) return;
+
+    // Check if users are friends
+    if (!selectedUser.isFriend) {
+      toast.error(`You must be friends with ${selectedUser.fullName} to send messages. Send a friend request first!`);
+      return;
+    }
+
     if (isSoundEnabled) playRandomKeyStrokeSound();
+
+    // Stop typing indicator when message is sent
+    if (selectedUser) {
+      emitTypingStop(selectedUser._id);
+    }
 
     sendMessage({
       text: text.trim(),
