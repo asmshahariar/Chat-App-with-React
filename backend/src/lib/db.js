@@ -25,10 +25,15 @@ export const connectDB = async () => {
       }
 
       console.log("Attempting to connect to MongoDB...");
+      console.log("MONGO_URI format:", ENV.MONGO_URI ? `${ENV.MONGO_URI.substring(0, 20)}...` : "not set");
+      
       const conn = await mongoose.connect(ENV.MONGO_URI, {
         dbName: 'chat_db',
         serverSelectionTimeoutMS: 10000, // 10 seconds timeout
         socketTimeoutMS: 45000, // 45 seconds socket timeout
+        connectTimeoutMS: 10000, // 10 seconds connection timeout
+        retryWrites: true,
+        w: 'majority'
       });
       
       isConnected = true;

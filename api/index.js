@@ -121,26 +121,42 @@ const initializeApp = async () => {
     // Add middleware to ensure DB connection before handling requests
     if (app && typeof app.use === 'function') {
       app.use(async (req, res, next) => {
-        // Skip DB check for health check and debug endpoints
-        if (req.path === "/api/health" || req.path === "/api/debug") {
+        // Skip DB check for health check, debug, and test endpoints
+        if (req.path === "/api/health" || req.path === "/api/debug" || req.path === "/api/test") {
           return next();
         }
 
         try {
-          const connected = await ensureDBConnection();
+          // Try to connect with a shorter timeout for serverless
+          const connected = await Promise.race([
+            ensureDBConnection(),
+            new Promise((_, reject) => 
+              setTimeout(() => reject(new Error("Database connection timeout")), 10000)
+            )
+          ]);
+          
           if (!connected) {
             console.error("Database connection failed for request:", req.path);
             console.error("MongoDB readyState:", mongoose.connection.readyState);
+            console.error("MONGO_URI exists:", !!process.env.MONGO_URI);
             return res.status(503).json({ 
               message: "Database connection unavailable. Please try again.",
-              readyState: mongoose.connection.readyState
+              readyState: mongoose.connection.readyState,
+              hint: "Check MongoDB network access and MONGO_URI environment variable"
             });
           }
         } catch (error) {
           console.error("DB connection error in middleware:", error);
+          console.error("Error name:", error.name);
+          console.error("Error code:", error.code);
+          console.error("Error message:", error.message);
           return res.status(503).json({ 
             message: "Database connection error. Please try again.",
-            error: error.message
+            error: error.message,
+            errorCode: error.code,
+            hint: error.message.includes("timeout") 
+              ? "Database connection timed out. Check MongoDB network access."
+              : "Check MONGO_URI and MongoDB network access settings."
           });
         }
         next();
