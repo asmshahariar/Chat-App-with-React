@@ -109,10 +109,17 @@ export const login = async (req, res) => {
       return res.status(500).json({ message: "Server configuration error" });
     }
 
+    // Check database connection
+    if (mongoose.connection.readyState !== 1) {
+      console.error("Database not connected. ReadyState:", mongoose.connection.readyState);
+      return res.status(503).json({ message: "Database connection unavailable. Please try again." });
+    }
+
     // Case-insensitive email search
-    const user = await User.findOne({ email: email.toLowerCase().trim() });
+    const trimmedEmail = email.trim().toLowerCase();
+    const user = await User.findOne({ email: trimmedEmail });
     if (!user) {
-      console.log("Login failed: User not found for email:", email);
+      console.log("Login failed: User not found for email:", trimmedEmail);
       return res.status(400).json({ message: "Invalid credentials" });
     }
     // never tell the client which one is incorrect: password or email
@@ -125,7 +132,7 @@ export const login = async (req, res) => {
 
     const isPasswordCorrect = await bcrypt.compare(password, user.password);
     if (!isPasswordCorrect) {
-      console.log("Login failed: Incorrect password for email:", email);
+      console.log("Login failed: Incorrect password for email:", trimmedEmail);
       return res.status(400).json({ message: "Invalid credentials" });
     }
 
@@ -143,11 +150,14 @@ export const login = async (req, res) => {
     console.error("Error details:", {
       message: error.message,
       name: error.name,
-      code: error.code
+      code: error.code,
+      dbReadyState: mongoose.connection.readyState
     });
     res.status(500).json({ 
       message: "Internal server error",
-      error: process.env.NODE_ENV === "development" ? error.message : undefined
+      error: error.message,
+      errorCode: error.code,
+      dbConnected: mongoose.connection.readyState === 1
     });
   }
 };

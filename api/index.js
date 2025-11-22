@@ -61,6 +61,8 @@ const ensureDBConnection = async () => {
 // Try to connect immediately (non-blocking, don't throw)
 ensureDBConnection().catch((error) => {
   console.error("Initial DB connection attempt failed (non-blocking):", error);
+  console.error("MONGO_URI exists:", !!process.env.MONGO_URI);
+  console.error("JWT_SECRET exists:", !!process.env.JWT_SECRET);
 });
 
 // Add middleware to ensure DB connection before handling requests
@@ -76,14 +78,19 @@ if (app && typeof app.use === 'function') {
       const connected = await ensureDBConnection();
       if (!connected) {
         console.error("Database connection failed for request:", req.path);
+        console.error("MongoDB readyState:", mongoose.connection.readyState);
         return res.status(503).json({ 
           message: "Database connection unavailable. Please try again.",
+          readyState: mongoose.connection.readyState
         });
       }
     } catch (error) {
       console.error("DB connection error in middleware:", error);
+      console.error("Error message:", error.message);
+      console.error("Error stack:", error.stack);
       return res.status(503).json({ 
         message: "Database connection error. Please try again.",
+        error: error.message
       });
     }
     next();
@@ -96,9 +103,12 @@ if (app && typeof app.use === 'function') {
   app.use((err, req, res, next) => {
     console.error("Unhandled error:", err);
     console.error("Error stack:", err.stack);
+    console.error("Request path:", req.path);
+    console.error("Request method:", req.method);
     res.status(500).json({ 
       message: "Internal server error",
-      error: process.env.NODE_ENV === "development" ? err.message : undefined
+      error: err.message,
+      path: req.path
     });
   });
 }
