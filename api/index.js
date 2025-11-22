@@ -15,27 +15,54 @@ const initializeApp = async () => {
 
   try {
     console.log("Initializing API function...");
+    console.log("Current working directory:", process.cwd());
+    console.log("MONGO_URI exists:", !!process.env.MONGO_URI);
+    console.log("JWT_SECRET exists:", !!process.env.JWT_SECRET);
+    console.log("NODE_ENV:", process.env.NODE_ENV);
     
-    // Import backend app
-    const serverModule = await import("../backend/src/server.js");
+    // Import backend app with detailed error handling
+    let serverModule;
+    try {
+      console.log("Attempting to import server.js...");
+      serverModule = await import("../backend/src/server.js");
+      console.log("Server module imported successfully");
+      console.log("Server module keys:", Object.keys(serverModule));
+    } catch (importError) {
+      console.error("Failed to import server.js:", importError);
+      console.error("Import error message:", importError.message);
+      console.error("Import error stack:", importError.stack);
+      throw new Error(`Failed to import server.js: ${importError.message}`);
+    }
+    
     app = serverModule.default;
     
     if (!app) {
-      throw new Error("Failed to import Express app from server.js");
+      console.error("Server module.default is:", serverModule.default);
+      console.error("Server module:", serverModule);
+      throw new Error("Failed to import Express app from server.js - default export is missing");
     }
+    
+    console.log("Express app imported successfully");
+    console.log("App type:", typeof app);
+    console.log("App has use method:", typeof app.use === "function");
 
     // Import database utilities
-    const dbModule = await import("../backend/src/lib/db.js");
-    const { connectDB } = dbModule;
+    let dbModule;
+    try {
+      dbModule = await import("../backend/src/lib/db.js");
+      console.log("Database module imported successfully");
+    } catch (dbImportError) {
+      console.error("Failed to import db.js:", dbImportError);
+      // Don't throw - we can still use the app without immediate DB connection
+    }
+    
+    const { connectDB } = dbModule || {};
     
     const mongooseModule = await import("mongoose");
     const mongoose = mongooseModule.default;
 
     // Log initialization
     console.log("API function initialized successfully");
-    console.log("MONGO_URI exists:", !!process.env.MONGO_URI);
-    console.log("JWT_SECRET exists:", !!process.env.JWT_SECRET);
-    console.log("NODE_ENV:", process.env.NODE_ENV);
 
     // Database connection management
     let dbConnectionPromise = null;
@@ -136,17 +163,35 @@ const initializeApp = async () => {
     return app;
   } catch (error) {
     console.error("CRITICAL: Failed to initialize API function:", error);
+    console.error("Init error name:", error.name);
+    console.error("Init error message:", error.message);
+    console.error("Init error code:", error.code);
     console.error("Init error stack:", error.stack);
+    
+    // Try to get more details about the error
+    if (error.cause) {
+      console.error("Init error cause:", error.cause);
+    }
+    if (error.code === "MODULE_NOT_FOUND") {
+      console.error("MODULE_NOT_FOUND - This usually means a dependency is missing");
+      console.error("Missing module:", error.message.match(/Cannot find module '([^']+)'/)?.[1]);
+    }
+    
     initError = error;
     
-    // Create a minimal error app
+    // Create a minimal error app that provides more details
     const errorApp = express();
     errorApp.use(express.json());
     errorApp.use((req, res) => {
       res.status(500).json({
         message: "Server initialization failed",
         error: error.message,
-        details: "Check Vercel function logs for more information"
+        errorName: error.name,
+        errorCode: error.code,
+        details: "Check Vercel function logs for more information",
+        hint: error.code === "MODULE_NOT_FOUND" 
+          ? "A required module is missing. Check package.json dependencies."
+          : "Check the Vercel function logs for the full error stack trace."
       });
     });
     
@@ -164,18 +209,61 @@ export default async (req, res) => {
     const appInstance = await initializeApp();
     
     // Log request for debugging
-    console.log(`[${req.method}] ${req.url || req.path}`);
+    console.log(`[${req.method}] ${req.url || req.path || req.originalUrl}`);
+    console.log("Request headers:", JSON.stringify(req.headers, null, 2));
     
-    // Vercel passes the full path including /api, so Express routes should match
+    // Wrap Express handler to catch any unhandled errors
+    const originalEnd = res.end;
+    res.end = function(...args) {
+      console.log(`Response sent: ${res.statusCode}`);
+      return originalEnd.apply(this, args);
+    };
+    
     // Handle the request - Express will route it
-    appInstance(req, res);
+    // Use a timeout to prevent hanging requests
+    const timeout = setTimeout(() => {
+      if (!res.headersSent) {
+        console.error("Request timeout after 30 seconds");
+        res.status(504).json({
+          message: "Request timeout",
+          error: "The request took too long to process"
+        });
+      }
+    }, 30000);
+    
+    // Handle request with error catching
+    appInstance(req, res, (err) => {
+      clearTimeout(timeout);
+      if (err) {
+        console.error("Express error handler:", err);
+        console.error("Error stack:", err.stack);
+        if (!res.headersSent) {
+          res.status(500).json({
+            message: "Internal server error",
+            error: err.message,
+            stack: process.env.NODE_ENV === "development" ? err.stack : undefined
+          });
+        }
+      }
+    });
+    
+    // Clear timeout when response is sent
+    res.on("finish", () => {
+      clearTimeout(timeout);
+    });
+    
   } catch (error) {
     console.error("Handler error:", error);
     console.error("Error stack:", error.stack);
+    console.error("Error name:", error.name);
+    console.error("Error code:", error.code);
     if (!res.headersSent) {
       res.status(500).json({
         message: "Internal server error",
-        error: error.message
+        error: error.message,
+        name: error.name,
+        code: error.code,
+        stack: process.env.NODE_ENV === "development" ? error.stack : undefined
       });
     }
   }
