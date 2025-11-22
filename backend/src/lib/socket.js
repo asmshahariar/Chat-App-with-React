@@ -19,6 +19,7 @@ if (!process.env.VERCEL) {
     "http://localhost:5173",
     "http://localhost:3000",
     "https://chat-app-with-react-three.vercel.app",
+    "https://chat-two-react.vercel.app",
   ].filter(Boolean);
 
   io = new Server(server, {
