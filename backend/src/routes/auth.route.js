@@ -14,6 +14,14 @@ router.post("/logout", logout);
 
 router.put("/update-profile", protectRoute, updateProfile);
 
-router.get("/check", protectRoute, (req, res) => res.status(200).json(req.user));
+router.get("/check", protectRoute, (req, res) => {
+  // Return user in consistent format
+  res.status(200).json({
+    _id: req.user._id,
+    fullName: req.user.fullName,
+    email: req.user.email,
+    profilePic: req.user.profilePic || "",
+  });
+});
 
 export default router;
